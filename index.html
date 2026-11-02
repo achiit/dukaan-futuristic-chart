@@ -1,0 +1,1220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEUROVIZ — AI Chart Engine</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&family=Rajdhani:wght@300;400;600&display=swap');
+
+  :root {
+    --bg: #020408;
+    --panel: #060d14;
+    --border: #0ff3;
+    --cyan: #00f5ff;
+    --green: #00ff88;
+    --orange: #ff6b2b;
+    --pink: #ff2d7a;
+    --purple: #b44fff;
+    --yellow: #ffe500;
+    --text: #c8e8f0;
+    --dim: #4a7a8a;
+    --glow-c: 0 0 20px #00f5ff66, 0 0 40px #00f5ff22;
+    --glow-g: 0 0 20px #00ff8866, 0 0 40px #00ff8822;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Rajdhani', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Scanline overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,245,255,0.015) 2px, rgba(0,245,255,0.015) 4px);
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  /* Grid bg */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,245,255,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,245,255,0.04) 1px, transparent 1px);
+    background-size: 60px 60px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .wrapper {
+    position: relative;
+    z-index: 1;
+    max-width: 1300px;
+    margin: 0 auto;
+    padding: 0 20px 60px;
+  }
+
+  /* HEADER */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 28px 0 20px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 40px;
+  }
+
+  .logo {
+    font-family: 'Orbitron', monospace;
+    font-size: 1.8rem;
+    font-weight: 900;
+    letter-spacing: 0.15em;
+    background: linear-gradient(90deg, var(--cyan), var(--green));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    text-shadow: none;
+    filter: drop-shadow(0 0 12px var(--cyan));
+  }
+
+  .logo span {
+    font-weight: 400;
+    font-size: 0.6rem;
+    letter-spacing: 0.3em;
+    display: block;
+    background: linear-gradient(90deg, var(--dim), var(--text));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-top: 2px;
+    filter: none;
+  }
+
+  .status-bar {
+    display: flex;
+    gap: 18px;
+    align-items: center;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--dim);
+  }
+
+  .pulse {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green);
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  /* INPUT ZONE */
+  .input-zone {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 32px;
+    margin-bottom: 36px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .input-zone::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--cyan), var(--green), transparent);
+    animation: scanbar 3s linear infinite;
+  }
+
+  @keyframes scanbar {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+
+  .zone-title {
+    font-family: 'Orbitron', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.25em;
+    color: var(--cyan);
+    margin-bottom: 22px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .zone-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, var(--border), transparent);
+  }
+
+  .input-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr auto;
+    gap: 16px;
+    align-items: end;
+  }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.6rem;
+    color: var(--dim);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+  }
+
+  input, select, textarea {
+    background: #0a1620;
+    border: 1px solid #0ff3;
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.8rem;
+    padding: 10px 14px;
+    border-radius: 3px;
+    outline: none;
+    transition: all 0.3s;
+  }
+
+  input:focus, select:focus, textarea:focus {
+    border-color: var(--cyan);
+    box-shadow: var(--glow-c);
+    background: #0c1e2e;
+  }
+
+  select option { background: #0a1620; }
+
+  textarea {
+    resize: vertical;
+    min-height: 90px;
+  }
+
+  .data-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px;
+    margin-top: 16px;
+  }
+
+  /* BUTTONS */
+  .btn {
+    font-family: 'Orbitron', monospace;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.3s;
+    position: relative;
+    overflow: hidden;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, #003344, #006688);
+    color: var(--cyan);
+    border: 1px solid var(--cyan);
+  }
+
+  .btn-primary:hover {
+    background: linear-gradient(135deg, #004455, #0088aa);
+    box-shadow: var(--glow-c);
+    transform: translateY(-1px);
+  }
+
+  .btn-primary::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, transparent 40%, rgba(0,245,255,0.1));
+    pointer-events: none;
+  }
+
+  .btn-add {
+    background: linear-gradient(135deg, #001a0a, #003318);
+    color: var(--green);
+    border: 1px solid var(--green);
+    padding: 8px 18px;
+    font-size: 0.6rem;
+  }
+
+  .btn-add:hover { box-shadow: var(--glow-g); }
+
+  .btn-clear {
+    background: transparent;
+    color: var(--dim);
+    border: 1px solid #ffffff22;
+    padding: 8px 18px;
+    font-size: 0.6rem;
+  }
+
+  .btn-clear:hover { color: var(--pink); border-color: var(--pink); }
+
+  /* CHART TYPE SELECTOR */
+  .chart-types {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 20px;
+  }
+
+  .chart-type-btn {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.65rem;
+    padding: 8px 16px;
+    border: 1px solid #0ff2;
+    background: transparent;
+    color: var(--dim);
+    cursor: pointer;
+    border-radius: 2px;
+    transition: all 0.25s;
+    letter-spacing: 0.1em;
+  }
+
+  .chart-type-btn:hover, .chart-type-btn.active {
+    border-color: var(--cyan);
+    color: var(--cyan);
+    background: rgba(0,245,255,0.07);
+    text-shadow: 0 0 8px var(--cyan);
+  }
+
+  /* DATA ENTRIES */
+  .entries-list {
+    margin-top: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 180px;
+    overflow-y: auto;
+  }
+
+  .entries-list::-webkit-scrollbar { width: 3px; }
+  .entries-list::-webkit-scrollbar-track { background: transparent; }
+  .entries-list::-webkit-scrollbar-thumb { background: var(--cyan); border-radius: 10px; }
+
+  .entry-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    background: rgba(0,245,255,0.04);
+    border: 1px solid #0ff1;
+    border-radius: 2px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.7rem;
+    animation: entryIn 0.3s ease;
+  }
+
+  @keyframes entryIn {
+    from { opacity: 0; transform: translateX(-10px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  .entry-label { color: var(--green); flex: 1; }
+  .entry-value { color: var(--cyan); font-weight: 700; min-width: 60px; text-align: right; }
+  .entry-color { width: 14px; height: 14px; border-radius: 2px; flex-shrink: 0; }
+  .entry-remove {
+    color: var(--dim);
+    cursor: pointer;
+    font-size: 0.9rem;
+    padding: 0 4px;
+    transition: color 0.2s;
+  }
+  .entry-remove:hover { color: var(--pink); }
+
+  /* CHART ZONE */
+  .charts-zone {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+
+  .chart-panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 24px;
+    position: relative;
+    overflow: hidden;
+    animation: panelAppear 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  @keyframes panelAppear {
+    from { opacity: 0; transform: scale(0.95) translateY(20px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+  }
+
+  .chart-panel::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at 50% 0%, rgba(0,245,255,0.04), transparent 70%);
+    pointer-events: none;
+  }
+
+  .chart-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+  }
+
+  .chart-panel-title {
+    font-family: 'Orbitron', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.2em;
+    color: var(--cyan);
+  }
+
+  .chart-badge {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.55rem;
+    padding: 3px 10px;
+    border: 1px solid currentColor;
+    border-radius: 20px;
+    letter-spacing: 0.1em;
+  }
+
+  .chart-panel-full {
+    grid-column: 1 / -1;
+  }
+
+  /* STATS ROW */
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+
+  .stat-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    padding: 18px 20px;
+    border-radius: 4px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .stat-card::before {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--cyan), transparent);
+  }
+
+  .stat-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.55rem;
+    color: var(--dim);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .stat-value {
+    font-family: 'Orbitron', monospace;
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: var(--cyan);
+    filter: drop-shadow(0 0 8px var(--cyan));
+    line-height: 1;
+  }
+
+  .stat-sub {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.6rem;
+    color: var(--dim);
+    margin-top: 5px;
+  }
+
+  /* EMPTY STATE */
+  .empty-state {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 80px 40px;
+    color: var(--dim);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.75rem;
+    letter-spacing: 0.2em;
+    border: 1px dashed #0ff2;
+    border-radius: 4px;
+    background: var(--panel);
+  }
+
+  .empty-state .icon {
+    font-size: 3rem;
+    display: block;
+    margin-bottom: 20px;
+    filter: drop-shadow(0 0 12px var(--cyan));
+  }
+
+  .empty-state p { margin-top: 8px; opacity: 0.5; font-size: 0.65rem; }
+
+  /* COLOR PICKER SWATCH */
+  .color-swatch-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+    flex-wrap: wrap;
+  }
+
+  .swatch {
+    width: 22px; height: 22px;
+    border-radius: 3px;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: all 0.2s;
+  }
+
+  .swatch:hover, .swatch.active { border-color: white; transform: scale(1.2); }
+
+  /* TITLE INPUT FULL */
+  .title-input {
+    width: 100%;
+    font-size: 0.9rem;
+    margin-bottom: 16px;
+  }
+
+  /* ACTIONS ROW */
+  .actions-row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 20px;
+  }
+
+  /* TOOLTIP */
+  .tooltip-bar {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.6rem;
+    color: var(--green);
+    margin-top: 10px;
+    min-height: 18px;
+    letter-spacing: 0.1em;
+  }
+
+  /* Corner decorators */
+  .corner {
+    position: absolute;
+    width: 12px; height: 12px;
+    border-color: var(--cyan);
+    border-style: solid;
+    opacity: 0.5;
+  }
+
+  .corner-tl { top: 6px; left: 6px; border-width: 1px 0 0 1px; }
+  .corner-tr { top: 6px; right: 6px; border-width: 1px 1px 0 0; }
+  .corner-bl { bottom: 6px; left: 6px; border-width: 0 0 1px 1px; }
+  .corner-br { bottom: 6px; right: 6px; border-width: 0 1px 1px 0; }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .input-grid { grid-template-columns: 1fr 1fr; }
+    .charts-zone { grid-template-columns: 1fr; }
+    .stats-row { grid-template-columns: 1fr 1fr; }
+    .chart-panel-full { grid-column: 1; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrapper">
+
+  <header>
+    <div class="logo">
+      NEUROVIZ
+      <span>ADAPTIVE CHART ENGINE v3.0</span>
+    </div>
+    <div class="status-bar">
+      <div class="pulse"></div>
+      <span>SYSTEM ONLINE</span>
+      <span>|</span>
+      <span id="liveTime">--:--:--</span>
+    </div>
+  </header>
+
+  <!-- INPUT ZONE -->
+  <div class="input-zone">
+    <div class="corner corner-tl"></div>
+    <div class="corner corner-tr"></div>
+    <div class="corner corner-bl"></div>
+    <div class="corner corner-br"></div>
+
+    <div class="zone-title">◈ DATA INPUT TERMINAL</div>
+
+    <input class="title-input" type="text" id="chartTitle" placeholder="Chart title (e.g. Monthly Revenue 2025)" />
+
+    <div class="input-grid">
+      <div class="field">
+        <label>Label / Category</label>
+        <input type="text" id="labelInput" placeholder="e.g. January" />
+      </div>
+      <div class="field">
+        <label>Value</label>
+        <input type="number" id="valueInput" placeholder="e.g. 4200" />
+      </div>
+      <div class="field">
+        <label>Color</label>
+        <div class="color-swatch-row" id="swatchRow"></div>
+      </div>
+      <div>
+        <button class="btn btn-add" onclick="addEntry()">+ ADD POINT</button>
+      </div>
+    </div>
+
+    <div class="tooltip-bar" id="tooltip">▸ Enter a label and value, then click ADD POINT</div>
+
+    <!-- Entries list -->
+    <div class="entries-list" id="entriesList"></div>
+
+    <!-- Chart Type -->
+    <div class="zone-title" style="margin-top:24px">◈ VISUALIZATION MODE</div>
+    <div class="chart-types" id="chartTypes">
+      <button class="chart-type-btn active" data-type="bar">▮▮ BAR</button>
+      <button class="chart-type-btn" data-type="line">∿ LINE</button>
+      <button class="chart-type-btn" data-type="radar">◎ RADAR</button>
+      <button class="chart-type-btn" data-type="doughnut">◉ DONUT</button>
+      <button class="chart-type-btn" data-type="polarArea">✦ POLAR</button>
+      <button class="chart-type-btn" data-type="pie">⬡ PIE</button>
+      <button class="chart-type-btn" data-type="bubble">● BUBBLE</button>
+    </div>
+
+    <div class="actions-row">
+      <button class="btn btn-primary" onclick="generateCharts()">⚡ GENERATE VISUALIZATION</button>
+      <button class="btn btn-clear" onclick="loadDemo()">◈ LOAD DEMO DATA</button>
+      <button class="btn btn-clear" onclick="clearAll()">✕ CLEAR ALL</button>
+    </div>
+  </div>
+
+  <!-- STATS ROW -->
+  <div class="stats-row" id="statsRow" style="display:none">
+    <div class="stat-card">
+      <div class="stat-label">Data Points</div>
+      <div class="stat-value" id="statCount">0</div>
+      <div class="stat-sub">entries loaded</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Total Sum</div>
+      <div class="stat-value" id="statSum">0</div>
+      <div class="stat-sub">aggregate</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Peak Value</div>
+      <div class="stat-value" id="statMax">0</div>
+      <div class="stat-sub">maximum</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Average</div>
+      <div class="stat-value" id="statAvg">0</div>
+      <div class="stat-sub">mean value</div>
+    </div>
+  </div>
+
+  <!-- CHARTS ZONE -->
+  <div class="charts-zone" id="chartsZone">
+    <div class="empty-state">
+      <span class="icon">◈</span>
+      AWAITING DATA STREAM
+      <p>Add data points above and click GENERATE VISUALIZATION</p>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let entries = [];
+let selectedColor = '#00f5ff';
+let selectedChartType = 'bar';
+let chartInstances = [];
+
+const PALETTE = [
+  '#00f5ff','#00ff88','#ff6b2b','#ff2d7a',
+  '#b44fff','#ffe500','#4fc3f7','#a5d6a7'
+];
+
+// ── Clock ──────────────────────────────────────────────────────────────────
+function updateTime() {
+  const now = new Date();
+  document.getElementById('liveTime').textContent =
+    now.toTimeString().split(' ')[0];
+}
+setInterval(updateTime, 1000);
+updateTime();
+
+// ── Swatches ───────────────────────────────────────────────────────────────
+function buildSwatches() {
+  const row = document.getElementById('swatchRow');
+  PALETTE.forEach(c => {
+    const s = document.createElement('div');
+    s.className = 'swatch' + (c === selectedColor ? ' active' : '');
+    s.style.background = c;
+    s.style.boxShadow = `0 0 8px ${c}88`;
+    s.onclick = () => {
+      selectedColor = c;
+      document.querySelectorAll('.swatch').forEach(x => x.classList.remove('active'));
+      s.classList.add('active');
+    };
+    row.appendChild(s);
+  });
+}
+buildSwatches();
+
+// ── Chart type selector ────────────────────────────────────────────────────
+document.getElementById('chartTypes').querySelectorAll('.chart-type-btn').forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll('.chart-type-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    selectedChartType = btn.dataset.type;
+  };
+});
+
+// ── Add Entry ──────────────────────────────────────────────────────────────
+function addEntry() {
+  const label = document.getElementById('labelInput').value.trim();
+  const val = parseFloat(document.getElementById('valueInput').value);
+  if (!label || isNaN(val)) {
+    showTip('⚠ Please enter both a label and a numeric value', '#ff2d7a');
+    return;
+  }
+  entries.push({ label, value: val, color: selectedColor });
+  renderEntryList();
+  document.getElementById('labelInput').value = '';
+  document.getElementById('valueInput').value = '';
+  // Auto-advance color
+  const idx = PALETTE.indexOf(selectedColor);
+  const next = PALETTE[(idx + 1) % PALETTE.length];
+  selectedColor = next;
+  document.querySelectorAll('.swatch').forEach((s, i) => {
+    s.classList.toggle('active', PALETTE[i] === selectedColor);
+  });
+  showTip(`✓ "${label}" → ${val} added (${entries.length} total)`, '#00ff88');
+}
+
+function removeEntry(i) {
+  entries.splice(i, 1);
+  renderEntryList();
+}
+
+function renderEntryList() {
+  const list = document.getElementById('entriesList');
+  list.innerHTML = '';
+  entries.forEach((e, i) => {
+    list.innerHTML += `
+      <div class="entry-item">
+        <div class="entry-color" style="background:${e.color};box-shadow:0 0 6px ${e.color}88"></div>
+        <div class="entry-label">${e.label}</div>
+        <div class="entry-value">${e.value.toLocaleString()}</div>
+        <div class="entry-remove" onclick="removeEntry(${i})">✕</div>
+      </div>`;
+  });
+}
+
+function showTip(msg, color = '#00f5ff') {
+  const t = document.getElementById('tooltip');
+  t.textContent = msg;
+  t.style.color = color;
+}
+
+// ── Generate Charts ────────────────────────────────────────────────────────
+function generateCharts() {
+  if (entries.length === 0) {
+    showTip('⚠ No data! Add at least one data point first.', '#ff2d7a');
+    return;
+  }
+
+  // Destroy old charts
+  chartInstances.forEach(c => c.destroy());
+  chartInstances = [];
+
+  const title = document.getElementById('chartTitle').value || 'My Data';
+  const labels = entries.map(e => e.label);
+  const values = entries.map(e => e.value);
+  const colors = entries.map(e => e.color);
+  const colorsA = colors.map(c => c + 'cc');
+
+  // Stats
+  const sum = values.reduce((a, b) => a + b, 0);
+  const max = Math.max(...values);
+  const avg = (sum / values.length).toFixed(1);
+  document.getElementById('statCount').textContent = entries.length;
+  document.getElementById('statSum').textContent = sum.toLocaleString();
+  document.getElementById('statMax').textContent = max.toLocaleString();
+  document.getElementById('statAvg').textContent = avg;
+  document.getElementById('statsRow').style.display = 'grid';
+
+  // Chart panels
+  const zone = document.getElementById('chartsZone');
+  zone.innerHTML = '';
+
+  const configs = buildChartConfigs(selectedChartType, title, labels, values, colors, colorsA);
+
+  configs.forEach((cfg, i) => {
+    const isWide = cfg.wide;
+    const panel = document.createElement('div');
+    panel.className = 'chart-panel' + (isWide ? ' chart-panel-full' : '');
+    panel.style.animationDelay = (i * 0.1) + 's';
+    panel.style.opacity = '0';
+    panel.innerHTML = `
+      <div class="corner corner-tl"></div>
+      <div class="corner corner-tr"></div>
+      <div class="corner corner-bl"></div>
+      <div class="corner corner-br"></div>
+      <div class="chart-panel-header">
+        <div class="chart-panel-title">${cfg.title}</div>
+        <div class="chart-badge" style="color:${cfg.color || 'var(--cyan)'}">${cfg.badge}</div>
+      </div>
+      <canvas id="chart${i}" style="max-height:${isWide ? '340' : '280'}px"></canvas>`;
+    zone.appendChild(panel);
+
+    setTimeout(() => { panel.style.opacity = '1'; }, i * 100);
+
+    const ctx = document.getElementById(`chart${i}`).getContext('2d');
+    const instance = new Chart(ctx, cfg.config);
+    chartInstances.push(instance);
+  });
+
+  showTip(`⚡ ${configs.length} chart(s) generated from ${entries.length} data points`, '#00f5ff');
+}
+
+// ── Chart Config Builder ───────────────────────────────────────────────────
+function buildChartConfigs(type, title, labels, values, colors, colorsA) {
+  const base = {
+    responsive: true,
+    plugins: {
+      legend: {
+        labels: {
+          color: '#c8e8f0',
+          font: { family: 'Share Tech Mono', size: 11 },
+          padding: 16,
+          boxWidth: 12
+        }
+      },
+      tooltip: {
+        backgroundColor: '#060d14',
+        borderColor: '#00f5ff55',
+        borderWidth: 1,
+        titleColor: '#00f5ff',
+        bodyColor: '#c8e8f0',
+        titleFont: { family: 'Orbitron', size: 11 },
+        bodyFont: { family: 'Share Tech Mono', size: 11 },
+        padding: 12
+      }
+    },
+    scales: type === 'bar' || type === 'line' ? {
+      x: { ticks: { color: '#4a7a8a', font: { family: 'Share Tech Mono', size: 10 } }, grid: { color: '#0ff1' } },
+      y: { ticks: { color: '#4a7a8a', font: { family: 'Share Tech Mono', size: 10 } }, grid: { color: '#0ff1' } }
+    } : undefined
+  };
+
+  // Gradient helper
+  function makeGrad(ctx2, c1, c2) {
+    const g = ctx2.createLinearGradient(0, 0, 0, 300);
+    g.addColorStop(0, c1);
+    g.addColorStop(1, c2);
+    return g;
+  }
+
+  if (type === 'bar') {
+    return [
+      {
+        title: title.toUpperCase() + ' — BAR CHART',
+        badge: 'COMPARATIVE',
+        color: '#00f5ff',
+        wide: true,
+        config: {
+          type: 'bar',
+          data: {
+            labels,
+            datasets: [{
+              label: title,
+              data: values,
+              backgroundColor: colorsA,
+              borderColor: colors,
+              borderWidth: 2,
+              borderRadius: 3
+            }]
+          },
+          options: { ...base, animation: { duration: 1200, easing: 'easeOutQuart' } }
+        }
+      },
+      {
+        title: title.toUpperCase() + ' — HORIZONTAL',
+        badge: 'RANKED',
+        color: '#00ff88',
+        config: {
+          type: 'bar',
+          data: {
+            labels,
+            datasets: [{
+              label: title,
+              data: values,
+              backgroundColor: colorsA,
+              borderColor: colors,
+              borderWidth: 2,
+              borderRadius: 3
+            }]
+          },
+          options: {
+            ...base,
+            indexAxis: 'y',
+            scales: {
+              x: { ticks: { color: '#4a7a8a', font: { family: 'Share Tech Mono', size: 10 } }, grid: { color: '#0ff1' } },
+              y: { ticks: { color: '#4a7a8a', font: { family: 'Share Tech Mono', size: 10 } }, grid: { color: '#0ff1' } }
+            },
+            animation: { duration: 900, easing: 'easeOutBack' }
+          }
+        }
+      },
+      {
+        title: title.toUpperCase() + ' — DISTRIBUTION',
+        badge: 'DONUT',
+        color: '#b44fff',
+        config: {
+          type: 'doughnut',
+          data: {
+            labels,
+            datasets: [{
+              data: values,
+              backgroundColor: colorsA,
+              borderColor: colors,
+              borderWidth: 2,
+              hoverOffset: 12
+            }]
+          },
+          options: { ...base, cutout: '65%', animation: { duration: 1000, animateRotate: true } }
+        }
+      }
+    ];
+  }
+
+  if (type === 'line') {
+    return [
+      {
+        title: title.toUpperCase() + ' — TREND LINE',
+        badge: 'TIME SERIES',
+        color: '#00f5ff',
+        wide: true,
+        config: {
+          type: 'line',
+          data: {
+            labels,
+            datasets: [{
+              label: title,
+              data: values,
+              borderColor: '#00f5ff',
+              backgroundColor: 'rgba(0,245,255,0.08)',
+              borderWidth: 2.5,
+              pointBackgroundColor: colors,
+              pointBorderColor: '#fff',
+              pointRadius: 5,
+              tension: 0.4,
+              fill: true
+            }]
+          },
+          options: { ...base, animation: { duration: 1200 } }
+        }
+      },
+      {
+        title: 'CUMULATIVE SUM',
+        badge: 'PROGRESSIVE',
+        color: '#00ff88',
+        config: {
+          type: 'line',
+          data: {
+            labels,
+            datasets: [{
+              label: 'Running Total',
+              data: values.reduce((acc, v, i) => [...acc, (acc[i - 1] || 0) + v], []),
+              borderColor: '#00ff88',
+              backgroundColor: 'rgba(0,255,136,0.06)',
+              borderWidth: 2.5,
+              pointRadius: 4,
+              tension: 0.3,
+              fill: true
+            }]
+          },
+          options: { ...base, animation: { duration: 900 } }
+        }
+      },
+      {
+        title: 'DATA RADAR',
+        badge: 'MULTI-AXIS',
+        color: '#b44fff',
+        config: {
+          type: 'radar',
+          data: {
+            labels,
+            datasets: [{
+              label: title,
+              data: values,
+              backgroundColor: 'rgba(180,79,255,0.15)',
+              borderColor: '#b44fff',
+              borderWidth: 2,
+              pointBackgroundColor: colors,
+              pointRadius: 4
+            }]
+          },
+          options: {
+            ...base,
+            scales: {
+              r: {
+                ticks: { color: '#4a7a8a', backdropColor: 'transparent', font: { family: 'Share Tech Mono', size: 9 } },
+                grid: { color: '#0ff1' },
+                angleLines: { color: '#0ff2' },
+                pointLabels: { color: '#c8e8f0', font: { family: 'Share Tech Mono', size: 10 } }
+              }
+            }
+          }
+        }
+      }
+    ];
+  }
+
+  if (type === 'radar') {
+    return [
+      {
+        title: title.toUpperCase() + ' — RADAR',
+        badge: 'SPIDER',
+        color: '#b44fff',
+        wide: true,
+        config: {
+          type: 'radar',
+          data: {
+            labels,
+            datasets: [{
+              label: title,
+              data: values,
+              backgroundColor: 'rgba(180,79,255,0.15)',
+              borderColor: '#b44fff',
+              borderWidth: 2.5,
+              pointBackgroundColor: colors,
+              pointBorderColor: '#fff',
+              pointRadius: 5
+            }, {
+              label: 'Average Baseline',
+              data: new Array(values.length).fill(values.reduce((a,b)=>a+b,0)/values.length),
+              backgroundColor: 'rgba(0,245,255,0.05)',
+              borderColor: 'rgba(0,245,255,0.4)',
+              borderWidth: 1.5,
+              borderDash: [4,4],
+              pointRadius: 0
+            }]
+          },
+          options: {
+            ...base,
+            scales: {
+              r: {
+                ticks: { color: '#4a7a8a', backdropColor: 'transparent', font: { family: 'Share Tech Mono', size: 10 } },
+                grid: { color: '#0ff2' },
+                angleLines: { color: '#0ff3' },
+                pointLabels: { color: '#c8e8f0', font: { family: 'Share Tech Mono', size: 11 } }
+              }
+            }
+          }
+        }
+      }
+    ];
+  }
+
+  if (type === 'doughnut') {
+    return [
+      {
+        title: title.toUpperCase() + ' — DONUT',
+        badge: 'SHARE',
+        color: '#ff6b2b',
+        config: {
+          type: 'doughnut',
+          data: {
+            labels,
+            datasets: [{ data: values, backgroundColor: colorsA, borderColor: colors, borderWidth: 2, hoverOffset: 14 }]
+          },
+          options: { ...base, cutout: '68%', animation: { duration: 1200, animateRotate: true } }
+        }
+      },
+      {
+        title: 'RING BREAKDOWN',
+        badge: 'NESTED',
+        color: '#ffe500',
+        config: {
+          type: 'doughnut',
+          data: {
+            labels,
+            datasets: [
+              { data: values, backgroundColor: colorsA, borderColor: colors, borderWidth: 2, hoverOffset: 10 },
+              { data: values.map(v => v * 0.6), backgroundColor: colors.map(c => c + '55'), borderColor: colors, borderWidth: 1 }
+            ]
+          },
+          options: { ...base, cutout: '40%', animation: { duration: 1000, animateRotate: true } }
+        }
+      }
+    ];
+  }
+
+  if (type === 'polarArea') {
+    return [
+      {
+        title: title.toUpperCase() + ' — POLAR AREA',
+        badge: 'RADIAL',
+        color: '#ff2d7a',
+        wide: true,
+        config: {
+          type: 'polarArea',
+          data: {
+            labels,
+            datasets: [{ data: values, backgroundColor: colorsA, borderColor: colors, borderWidth: 2 }]
+          },
+          options: {
+            ...base,
+            scales: { r: { ticks: { color: '#4a7a8a', backdropColor: 'transparent', font: { family: 'Share Tech Mono', size: 9 } }, grid: { color: '#0ff2' } } },
+            animation: { duration: 1000, animateRotate: true, animateScale: true }
+          }
+        }
+      }
+    ];
+  }
+
+  if (type === 'pie') {
+    return [
+      {
+        title: title.toUpperCase() + ' — PIE CHART',
+        badge: 'PROPORTION',
+        color: '#ffe500',
+        config: {
+          type: 'pie',
+          data: {
+            labels,
+            datasets: [{ data: values, backgroundColor: colorsA, borderColor: colors, borderWidth: 2, hoverOffset: 12 }]
+          },
+          options: { ...base, animation: { duration: 1200, animateRotate: true } }
+        }
+      },
+      {
+        title: 'BAR COMPARISON',
+        badge: 'SORTED',
+        color: '#00f5ff',
+        config: {
+          type: 'bar',
+          data: {
+            labels: [...labels].sort((a, b) => values[labels.indexOf(b)] - values[labels.indexOf(a)]),
+            datasets: [{
+              data: [...values].sort((a, b) => b - a),
+              backgroundColor: colorsA,
+              borderColor: colors,
+              borderWidth: 2,
+              borderRadius: 3
+            }]
+          },
+          options: { ...base, plugins: { ...base.plugins, legend: { display: false } }, animation: { duration: 900 } }
+        }
+      }
+    ];
+  }
+
+  if (type === 'bubble') {
+    return [
+      {
+        title: title.toUpperCase() + ' — BUBBLE MAP',
+        badge: 'SPATIAL',
+        color: '#00ff88',
+        wide: true,
+        config: {
+          type: 'bubble',
+          data: {
+            datasets: entries.map((e, i) => ({
+              label: e.label,
+              data: [{ x: i + 1, y: e.value, r: Math.max(5, Math.sqrt(e.value / (Math.max(...values) / 40))) }],
+              backgroundColor: e.color + 'aa',
+              borderColor: e.color,
+              borderWidth: 2
+            }))
+          },
+          options: {
+            ...base,
+            scales: {
+              x: { ticks: { color: '#4a7a8a', font: { family: 'Share Tech Mono', size: 10 } }, grid: { color: '#0ff1' } },
+              y: { ticks: { color: '#4a7a8a', font: { family: 'Share Tech Mono', size: 10 } }, grid: { color: '#0ff1' } }
+            },
+            animation: { duration: 1200, easing: 'easeOutElastic' }
+          }
+        }
+      }
+    ];
+  }
+
+  return [];
+}
+
+// ── Demo Data ──────────────────────────────────────────────────────────────
+function loadDemo() {
+  entries = [
+    { label: 'January', value: 4200, color: '#00f5ff' },
+    { label: 'February', value: 6800, color: '#00ff88' },
+    { label: 'March', value: 5100, color: '#ff6b2b' },
+    { label: 'April', value: 8900, color: '#ff2d7a' },
+    { label: 'May', value: 7300, color: '#b44fff' },
+    { label: 'June', value: 9600, color: '#ffe500' },
+    { label: 'July', value: 11200, color: '#4fc3f7' },
+    { label: 'August', value: 10500, color: '#a5d6a7' }
+  ];
+  document.getElementById('chartTitle').value = 'Monthly Revenue 2025';
+  renderEntryList();
+  showTip('✓ Demo data loaded — click GENERATE VISUALIZATION', '#00ff88');
+  generateCharts();
+}
+
+// ── Clear ──────────────────────────────────────────────────────────────────
+function clearAll() {
+  entries = [];
+  chartInstances.forEach(c => c.destroy());
+  chartInstances = [];
+  renderEntryList();
+  document.getElementById('chartsZone').innerHTML = `
+    <div class="empty-state">
+      <span class="icon">◈</span>
+      AWAITING DATA STREAM
+      <p>Add data points above and click GENERATE VISUALIZATION</p>
+    </div>`;
+  document.getElementById('statsRow').style.display = 'none';
+  document.getElementById('chartTitle').value = '';
+  showTip('▸ Cleared. Enter new data to begin.', '#4a7a8a');
+}
+
+// Enter key on value input triggers add
+document.getElementById('valueInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') addEntry();
+});
+document.getElementById('labelInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('valueInput').focus();
+});
+</script>
+</body>
+</html>
